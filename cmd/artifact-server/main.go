@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"flag"
+	"strings"
 	"fmt"
 	"os"
 	"os/signal"
@@ -17,6 +18,11 @@ func main() {
 	port := flag.String("port", "8088", "listen port")
 	retentionDays := flag.Int("retention-days", 90, "fallback artifact lifetime in days when the upload supplies no expiration (1-400)")
 	flag.Parse()
+	password := strings.TrimSpace(os.Getenv("ACT_ARTIFACT_PASSWORD"))
+	if password == "" {
+		fmt.Fprintln(os.Stderr, "ACT_ARTIFACT_PASSWORD must be set for the standalone artifact server")
+		os.Exit(2)
+	}
 	if *retentionDays < 1 || *retentionDays > 400 {
 		fmt.Fprintln(os.Stderr, "--retention-days must be between 1 and 400")
 		os.Exit(2)
@@ -25,7 +31,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	cancel := artifacts.Serve(ctx, *dir, *addr, *port, artifacts.ServeOptions{RetentionDays: *retentionDays})
+	cancel := artifacts.Serve(ctx, *dir, *addr, *port, artifacts.ServeOptions{RetentionDays: *retentionDays, Password: password})
 	<-ctx.Done()
 	cancel()
 }
