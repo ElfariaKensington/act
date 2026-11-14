@@ -322,7 +322,9 @@ func (r *artifactV4Routes) createArtifact(ctx *ArtifactContext) {
 		}
 		// The patched runner supplies the repository's retention through the
 		// official upload action. A CLI value is only a fallback for other clients.
-		expiresAt = req.ExpiresAt.AsTime()
+		if req.ExpiresAt.AsTime().Before(expiresAt) {
+			expiresAt = req.ExpiresAt.AsTime()
+		}
 	}
 
 	safeRunPath := safeResolve(r.baseDir, fmt.Sprint(runID))
