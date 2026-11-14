@@ -46,7 +46,7 @@ func TestArtifactRetentionSurvivesRestartAndDeletesExpiredFiles(t *testing.T) {
 
 	// Cleanup has no reference to the router: all deadlines come from disk,
 	// even after a restart with a different fallback setting.
-	if err := cleanupExpiredArtifacts(root, 1, now.Add(3*24*time.Hour)); err != nil {
+	if err := cleanupExpiredArtifacts(root, 7, now.Add(3*24*time.Hour)); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := os.Stat(filepath.Join(root, "123", "short")); !os.IsNotExist(err) {
