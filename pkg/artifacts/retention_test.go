@@ -63,8 +63,8 @@ func TestArtifactRetentionSurvivesRestartAndDeletesExpiredFiles(t *testing.T) {
 	if _, err := os.Stat(artifactV4ZipPath(root, 123, "fallback")); !os.IsNotExist(err) {
 		t.Fatalf("CLI fallback deadline was not enforced: %v", err)
 	}
-	if _, err := os.Stat(artifactV4ZipPath(root, 123, "long")); err != nil {
-		t.Fatalf("explicit upload expiration was shortened by fallback: %v", err)
+	if _, err := os.Stat(artifactV4ZipPath(root, 123, "long")); !os.IsNotExist(err) {
+		t.Fatalf("server retention cap did not expire long-lived upload: %v", err)
 	}
 	if err := cleanupExpiredArtifacts(root, 1, now.Add(11*24*time.Hour)); err != nil {
 		t.Fatal(err)
