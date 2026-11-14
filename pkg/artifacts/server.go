@@ -2,6 +2,7 @@ package artifacts
 
 import (
 	"context"
+	"crypto/subtle"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -587,6 +588,8 @@ func downloadLocalArtifact(root string, w http.ResponseWriter, req *http.Request
 type ServeOptions struct {
 	// RetentionDays applies when an upload does not supply its own expiration.
 	RetentionDays int
+	// Password protects artifact discovery and direct downloads on standalone servers.
+	Password string
 }
 
 func Serve(ctx context.Context, artifactPath string, addr string, port string, options ...ServeOptions) context.CancelFunc {
@@ -653,10 +656,21 @@ func Serve(ctx context.Context, artifactPath string, addr string, port string, o
 	downloads(router, artifactPath, fsys)
 	RoutesV4(router, artifactPath, fsys, fsys, retentionDays)
 
+	password := ""
+	if len(options) > 0 {
+		password = options[0].Password
+	}
+
 	server := &http.Server{
 		Addr:              fmt.Sprintf("%s:%s", addr, port),
 		ReadHeaderTimeout: 2 * time.Second,
 		Handler: http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if password != "" && artifactRouteRequiresPassword(r) && !artifactPasswordValid(r, password) {
+				w.Header().Set("WWW-Authenticate", `Basic realm="Artifacts", charset="UTF-8"`)
+				w.Header().Set("Cache-Control", "no-store")
+				http.Error(w, "authentication required", http.StatusUnauthorized)
+				return
+			}
 			storageMu.RLock()
 			defer storageMu.RUnlock()
 			router.ServeHTTP(w, r)
@@ -682,4 +696,28 @@ func Serve(ctx context.Context, artifactPath string, addr string, port string, o
 	}()
 
 	return cancel
+}
+
+// Browser pages, downloads and artifact enumeration must never be anonymous.
+// Signed v4 blob transfers remain usable with their existing expiring signatures.
+func artifactRouteRequiresPassword(r *http.Request) bool {
+	p := r.URL.Path
+	if p == "/" || p == "/artifacts" || strings.HasPrefix(p, "/local-artifacts/") || strings.HasPrefix(p, "/download/") || strings.HasPrefix(p, "/artifact/") {
+		return true
+	}
+	if r.Method == http.MethodGet && strings.HasPrefix(p, "/_apis/pipelines/workflows/") && strings.HasSuffix(p, "/artifacts") {
+		return true
+	}
+	if strings.HasPrefix(p, ArtifactV4RouteBase+"/") {
+		switch strings.TrimPrefix(p, ArtifactV4RouteBase+"/") {
+		case "ListArtifacts", "GetSignedArtifactURL", "DeleteArtifact":
+			return true
+		}
+	}
+	return false
+}
+
+func artifactPasswordValid(r *http.Request, password string) bool {
+	_, given, ok := r.BasicAuth()
+	return ok && subtle.ConstantTimeCompare([]byte(given), []byte(password)) == 1
 }
