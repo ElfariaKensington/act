@@ -79,6 +79,16 @@ func artifactExpiration(dir string, retentionDays int) (time.Time, error) {
 		if retention.ExpiresAt.IsZero() {
 			return time.Time{}, errors.New("artifact retention deadline is missing: " + dir)
 		}
+		// The metadata file is written when the upload starts. The server cap
+		// also applies to artifacts created before a configuration change.
+		info, err := os.Stat(filepath.Join(dir, retentionFile))
+		if err != nil {
+			return time.Time{}, err
+		}
+		cap := info.ModTime().Add(time.Duration(retentionDays) * 24 * time.Hour)
+		if cap.Before(retention.ExpiresAt) {
+			return cap, nil
+		}
 		return retention.ExpiresAt, nil
 	}
 	if !os.IsNotExist(err) {
