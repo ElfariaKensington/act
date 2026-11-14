@@ -80,6 +80,7 @@ package artifacts
 
 import (
 	"crypto/hmac"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/hex"
@@ -222,8 +223,16 @@ func RoutesV4(router *httprouter.Router, baseDir string, fsys WriteFS, rfs fs.FS
 	})
 }
 
+var artifactSigningKey = func() []byte {
+	key := make([]byte, 32)
+	if _, err := rand.Read(key); err != nil {
+		panic("could not initialize artifact URL signing key: " + err.Error())
+	}
+	return key
+}()
+
 func (r artifactV4Routes) buildSignature(endp, expires, artifactName string, taskID int64) []byte {
-	mac := hmac.New(sha256.New, []byte{0xba, 0xdb, 0xee, 0xf0})
+	mac := hmac.New(sha256.New, artifactSigningKey)
 	mac.Write([]byte(endp))
 	mac.Write([]byte(expires))
 	mac.Write([]byte(artifactName))
