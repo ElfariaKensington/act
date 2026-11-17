@@ -698,23 +698,11 @@ func Serve(ctx context.Context, artifactPath string, addr string, port string, o
 	return cancel
 }
 
-// Browser pages, downloads and artifact enumeration must never be anonymous.
-// Signed v4 blob transfers remain usable with their existing expiring signatures.
+// Only the human-facing artifact index requires a password. GitHub Actions
+// clients must be able to use the artifact APIs (including list/delete during
+// overwrite) and signed blob transfer endpoints without HTTP Basic auth.
 func artifactRouteRequiresPassword(r *http.Request) bool {
-	p := r.URL.Path
-	if p == "/" || p == "/artifacts" || strings.HasPrefix(p, "/local-artifacts/") || strings.HasPrefix(p, "/download/") || strings.HasPrefix(p, "/artifact/") {
-		return true
-	}
-	if r.Method == http.MethodGet && strings.HasPrefix(p, "/_apis/pipelines/workflows/") && strings.HasSuffix(p, "/artifacts") {
-		return true
-	}
-	if strings.HasPrefix(p, ArtifactV4RouteBase+"/") {
-		switch strings.TrimPrefix(p, ArtifactV4RouteBase+"/") {
-		case "ListArtifacts", "GetSignedArtifactURL", "DeleteArtifact":
-			return true
-		}
-	}
-	return false
+	return r.Method == http.MethodGet && (r.URL.Path == "/" || r.URL.Path == "/artifacts")
 }
 
 func artifactPasswordValid(r *http.Request, password string) bool {
